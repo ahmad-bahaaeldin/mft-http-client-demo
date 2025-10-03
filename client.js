@@ -217,11 +217,11 @@ class ActiveTransferClient {
       // Use stream for better memory efficiency with large files
       const fileStream = fs.createReadStream(filePath);
 
+      form.append('uploadPath', remotePath);
       form.append('file', fileStream, {
         filename: fileName,
         knownLength: fileSize
       });
-      form.append('path', remotePath);
 
       // Calculate timeout based on file size (at least 5 minutes for large files)
       // Assume 10 MB/s upload speed, add 2x buffer + 60s base
@@ -237,10 +237,11 @@ class ActiveTransferClient {
       console.log('Username:', this.auth.username);
       console.log('File:', fileName);
       console.log('File Size:', (fileSize / 1024 / 1024).toFixed(2), 'MB');
-      console.log('Remote Path:', remotePath);
+      console.log('Upload Path:', remotePath);
       console.log('Content-Type:', form.getHeaders()['content-type']);
       console.log('Transfer: Streaming (chunked)');
       console.log('Timeout:', (timeoutMs / 1000).toFixed(0), 'seconds');
+      console.log('Form Data Fields:', Object.keys(form).length > 0 ? 'uploadPath, file' : 'checking...');
       console.log('━'.repeat(60) + '\n');
 
       const response = await axiosInstance.post('/api/upload', form, {

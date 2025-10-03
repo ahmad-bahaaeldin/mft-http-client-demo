@@ -1,0 +1,45 @@
+{
+  "defaultEnvironment": "local",
+  "environments": {
+    "local": {
+      "name": "Local Environment",
+      "server": {
+        "host": "localhost",
+        "port": 8080,
+        "protocol": "http"
+      },
+      "auth": {
+        "username": "your-username",
+        "password": "your-password"
+      }
+    },
+    "saas": {
+      "name": "SaaS Environment",
+      "server": {
+        "host": "your-instance.a-fra-s100.mft.ipaas.automation.ibm.com",
+        "port": 8443,
+        "protocol": "https"
+      },
+      "auth": {
+        "username": "your-username",
+        "password": "your-password"
+      }
+    },
+    "techzone": {
+      "name": "Tech Zone",
+      "server": {
+        "host": "your-techzone-host",
+        "port": 5566,
+        "protocol": "http"
+      },
+      "auth": {
+        "username": "your-username",
+        "password": "your-password"
+      }
+    }
+  },
+  "defaults": {
+    "uploadPath": "/uploads",
+    "downloadPath": "/downloads"
+  }
+}

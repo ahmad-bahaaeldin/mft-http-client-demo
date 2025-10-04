@@ -188,12 +188,11 @@ class ActiveTransferClient {
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
         timeout: timeoutMs,
-        // Optional: Add progress tracking
+        // Track upload progress using file size as fallback
         onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            process.stdout.write(`\r📤 Upload progress: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)} MB / ${(progressEvent.total / 1024 / 1024).toFixed(2)} MB)`);
-          }
+          const total = progressEvent.total || fileSize;
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / total);
+          process.stdout.write(`\r📤 Upload progress: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)} MB / ${(total / 1024 / 1024).toFixed(2)} MB)`);
         }
       });
 
@@ -279,31 +278,51 @@ class ActiveTransferClient {
       console.log('Form Data Fields:', 'uploadPath, file');
       console.log('━'.repeat(60) + '\n');
 
-      const response = await axiosInstance.post('/api/upload', form, {
-        headers: {
-          ...form.getHeaders()
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: timeoutMs,
-        // Optional: Add progress tracking
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            process.stdout.write(`\r📤 Upload progress: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)} MB / ${(progressEvent.total / 1024 / 1024).toFixed(2)} MB)`);
-          }
-        }
+      // Get the form length for progress tracking
+      const formLength = await new Promise((resolve, reject) => {
+        form.getLength((err, length) => {
+          if (err) reject(err);
+          else resolve(length);
+        });
       });
 
-      console.log('\n'); // New line after progress
+      let uploadedBytes = 0;
+      let progressInterval = null;
 
-      return {
-        success: true,
-        message: 'File uploaded successfully (On-Premises)',
-        data: response.data
-      };
+      try {
+        progressInterval = setInterval(() => {
+          const percent = Math.round((uploadedBytes * 100) / formLength);
+          process.stdout.write(`\r📤 Upload progress: ${percent}% (${(uploadedBytes / 1024 / 1024).toFixed(2)} MB / ${(formLength / 1024 / 1024).toFixed(2)} MB)`);
+        }, 100);
+
+        const response = await axiosInstance.post('/api/upload', form, {
+          headers: {
+            ...form.getHeaders()
+          },
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+          timeout: timeoutMs,
+          maxRedirects: 0,
+          // Track upload progress
+          onUploadProgress: (progressEvent) => {
+            uploadedBytes = progressEvent.loaded;
+          }
+        });
+
+        clearInterval(progressInterval);
+        process.stdout.write(`\r📤 Upload progress: 100% (${(formLength / 1024 / 1024).toFixed(2)} MB / ${(formLength / 1024 / 1024).toFixed(2)} MB)\n`);
+
+        return {
+          success: true,
+          message: 'File uploaded successfully (On-Premises)',
+          data: response.data
+        };
+      } catch (uploadError) {
+        if (progressInterval) clearInterval(progressInterval);
+        process.stdout.write('\n');
+        throw uploadError;
+      }
     } catch (error) {
-      console.log('\n'); // New line after progress on error
       return this.handleError('Upload (On-Premises)', error, requestInfo);
     }
   }

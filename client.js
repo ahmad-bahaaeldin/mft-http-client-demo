@@ -2,6 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -93,26 +94,29 @@ class ActiveTransferClient {
    * Upload a file to Active Transfer server
    * @param {string} filePath - Local file path to upload
    * @param {string} remotePath - Remote destination path (relative to VFS root)
+   * @param {Object} options - Upload options
+   * @param {boolean} options.compress - Compress file to .gz before uploading (default: false)
    * @returns {Promise<Object>} Response data
    */
-  async uploadFile(filePath, remotePath = '/') {
+  async uploadFile(filePath, remotePath = '/', options = {}) {
     if (this.isSaaS) {
-      return this.uploadFileSaaS(filePath, remotePath);
+      return this.uploadFileSaaS(filePath, remotePath, options);
     } else {
-      return this.uploadFileOnPrem(filePath, remotePath);
+      return this.uploadFileOnPrem(filePath, remotePath, options);
     }
   }
 
   /**
    * Upload file for SaaS environment
    */
-  async uploadFileSaaS(filePath, remotePath = '/') {
+  async uploadFileSaaS(filePath, remotePath = '/', options = {}) {
     // Ensure we're logged in first
     await this.loginSaaS();
 
     const fileName = path.basename(filePath);
     const fileStats = fs.statSync(filePath);
     const fileSize = fileStats.size;
+    const compress = options.compress || false;
 
     const requestInfo = {
       endpoint: '/WebInterface/function/',
@@ -123,22 +127,35 @@ class ActiveTransferClient {
       fileSize: fileSize,
       baseUrl: this.baseUrl,
       username: this.auth.username,
-      type: 'SaaS'
+      type: 'SaaS',
+      compress: compress
     };
 
     try {
       const form = new FormData();
 
       // Use stream for better memory efficiency with large files
-      const fileStream = fs.createReadStream(filePath);
+      let fileStream = fs.createReadStream(filePath);
+      let uploadFileName = fileName;
+      let uploadFileSize = fileSize;
+
+      // Apply gzip compression if requested
+      if (compress) {
+        fileStream = fileStream.pipe(zlib.createGzip());
+        uploadFileName = fileName + '.gz';
+        uploadFileSize = null; // Size unknown after compression
+      }
 
       // SaaS-specific parameters from the curl
       form.append('uploadPath', remotePath.endsWith('/') ? remotePath : remotePath + '/');
       form.append('the_action', 'STOR');
-      form.append('file_lWsx_SINGLE_FILE_POST', fileStream, {
-        filename: fileName,
-        knownLength: fileSize
-      });
+
+      const fileOptions = { filename: uploadFileName };
+      if (uploadFileSize) {
+        fileOptions.knownLength = uploadFileSize;
+      }
+
+      form.append('file_lWsx_SINGLE_FILE_POST', fileStream, fileOptions);
 
       // Calculate timeout based on file size (at least 5 minutes for large files)
       // Assume 10 MB/s upload speed, add 2x buffer + 60s base
@@ -152,10 +169,12 @@ class ActiveTransferClient {
       console.log('URL:', `${this.baseUrl}/WebInterface/function/`);
       console.log('Method: POST');
       console.log('Username:', this.auth.username);
-      console.log('File:', fileName);
-      console.log('File Size:', (fileSize / 1024 / 1024).toFixed(2), 'MB');
+      console.log('File (original):', fileName);
+      console.log('File (upload):', uploadFileName);
+      console.log('File Size (original):', (fileSize / 1024 / 1024).toFixed(2), 'MB');
       console.log('Upload Path:', remotePath);
       console.log('Action: STOR');
+      console.log('Compression:', compress ? 'gzip (enabled)' : 'none');
       console.log('Content-Type:', form.getHeaders()['content-type']);
       console.log('Transfer: Streaming (chunked)');
       console.log('Timeout:', (timeoutMs / 1000).toFixed(0), 'seconds');
@@ -194,10 +213,11 @@ class ActiveTransferClient {
   /**
    * Upload file for On-Premises environment
    */
-  async uploadFileOnPrem(filePath, remotePath = '/') {
+  async uploadFileOnPrem(filePath, remotePath = '/', options = {}) {
     const fileName = path.basename(filePath);
     const fileStats = fs.statSync(filePath);
     const fileSize = fileStats.size;
+    const compress = options.compress || false;
 
     const requestInfo = {
       endpoint: '/api/upload',
@@ -208,20 +228,33 @@ class ActiveTransferClient {
       fileSize: fileSize,
       baseUrl: this.baseUrl,
       username: this.auth.username,
-      type: 'On-Premises'
+      type: 'On-Premises',
+      compress: compress
     };
 
     try {
       const form = new FormData();
 
       // Use stream for better memory efficiency with large files
-      const fileStream = fs.createReadStream(filePath);
+      let fileStream = fs.createReadStream(filePath);
+      let uploadFileName = fileName;
+      let uploadFileSize = fileSize;
+
+      // Apply gzip compression if requested
+      if (compress) {
+        fileStream = fileStream.pipe(zlib.createGzip());
+        uploadFileName = fileName + '.gz';
+        uploadFileSize = null; // Size unknown after compression
+      }
 
       form.append('uploadPath', remotePath);
-      form.append('file', fileStream, {
-        filename: fileName,
-        knownLength: fileSize
-      });
+
+      const fileOptions = { filename: uploadFileName };
+      if (uploadFileSize) {
+        fileOptions.knownLength = uploadFileSize;
+      }
+
+      form.append('file', fileStream, fileOptions);
 
       // Calculate timeout based on file size (at least 5 minutes for large files)
       // Assume 10 MB/s upload speed, add 2x buffer + 60s base
@@ -235,13 +268,15 @@ class ActiveTransferClient {
       console.log('URL:', `${this.baseUrl}/api/upload`);
       console.log('Method: POST');
       console.log('Username:', this.auth.username);
-      console.log('File:', fileName);
-      console.log('File Size:', (fileSize / 1024 / 1024).toFixed(2), 'MB');
+      console.log('File (original):', fileName);
+      console.log('File (upload):', uploadFileName);
+      console.log('File Size (original):', (fileSize / 1024 / 1024).toFixed(2), 'MB');
       console.log('Upload Path:', remotePath);
+      console.log('Compression:', compress ? 'gzip (enabled)' : 'none');
       console.log('Content-Type:', form.getHeaders()['content-type']);
       console.log('Transfer: Streaming (chunked)');
       console.log('Timeout:', (timeoutMs / 1000).toFixed(0), 'seconds');
-      console.log('Form Data Fields:', Object.keys(form).length > 0 ? 'uploadPath, file' : 'checking...');
+      console.log('Form Data Fields:', 'uploadPath, file');
       console.log('━'.repeat(60) + '\n');
 
       const response = await axiosInstance.post('/api/upload', form, {

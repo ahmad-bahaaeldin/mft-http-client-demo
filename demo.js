@@ -101,14 +101,26 @@ async function uploadWorkflow() {
       name: 'remotePath',
       message: 'Enter remote destination path (default: /):',
       default: '/'
+    },
+    {
+      type: 'confirm',
+      name: 'compress',
+      message: 'Compress file with gzip before uploading?',
+      default: false
     }
   ]);
 
   console.log('\n⏳ Uploading file...');
-  const result = await client.uploadFile(answers.localPath, answers.remotePath);
+  const result = await client.uploadFile(answers.localPath, answers.remotePath, {
+    compress: answers.compress
+  });
 
   if (result.success) {
     console.log('✅', result.message);
+    if (answers.compress) {
+      console.log('📦 File was compressed and uploaded as:', path.basename(answers.localPath) + '.gz');
+      console.log('⚠️  Remember to configure MFT post-action to decompress the file');
+    }
     console.log('📊 Response:', JSON.stringify(result.data, null, 2));
   } else {
     console.log('❌ Upload failed:', result.message);

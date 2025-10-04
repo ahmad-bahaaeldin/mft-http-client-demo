@@ -278,22 +278,37 @@ class ActiveTransferClient {
       console.log('Form Data Fields:', 'uploadPath, file');
       console.log('━'.repeat(60) + '\n');
 
-      // Get the form length for progress tracking
-      const formLength = await new Promise((resolve, reject) => {
-        form.getLength((err, length) => {
-          if (err) reject(err);
-          else resolve(length);
-        });
-      });
-
       let uploadedBytes = 0;
       let progressInterval = null;
+      let formLength = null;
+
+      // Get the form length for progress tracking (only works for non-compressed files)
+      if (!compress) {
+        try {
+          formLength = await new Promise((resolve, reject) => {
+            form.getLength((err, length) => {
+              if (err) reject(err);
+              else resolve(length);
+            });
+          });
+        } catch (err) {
+          console.log('⚠️  Could not determine form length, progress may be inaccurate');
+        }
+      }
 
       try {
-        progressInterval = setInterval(() => {
-          const percent = Math.round((uploadedBytes * 100) / formLength);
-          process.stdout.write(`\r📤 Upload progress: ${percent}% (${(uploadedBytes / 1024 / 1024).toFixed(2)} MB / ${(formLength / 1024 / 1024).toFixed(2)} MB)`);
-        }, 100);
+        if (formLength) {
+          // Show percentage progress for non-compressed uploads
+          progressInterval = setInterval(() => {
+            const percent = Math.round((uploadedBytes * 100) / formLength);
+            process.stdout.write(`\r📤 Upload progress: ${percent}% (${(uploadedBytes / 1024 / 1024).toFixed(2)} MB / ${(formLength / 1024 / 1024).toFixed(2)} MB)`);
+          }, 100);
+        } else {
+          // Show bytes uploaded for compressed uploads (no percentage)
+          progressInterval = setInterval(() => {
+            process.stdout.write(`\r📤 Uploading: ${(uploadedBytes / 1024 / 1024).toFixed(2)} MB sent...`);
+          }, 100);
+        }
 
         const response = await axiosInstance.post('/api/upload', form, {
           headers: {
@@ -310,7 +325,12 @@ class ActiveTransferClient {
         });
 
         clearInterval(progressInterval);
-        process.stdout.write(`\r📤 Upload progress: 100% (${(formLength / 1024 / 1024).toFixed(2)} MB / ${(formLength / 1024 / 1024).toFixed(2)} MB)\n`);
+
+        if (formLength) {
+          process.stdout.write(`\r📤 Upload progress: 100% (${(formLength / 1024 / 1024).toFixed(2)} MB / ${(formLength / 1024 / 1024).toFixed(2)} MB)\n`);
+        } else {
+          process.stdout.write(`\r📤 Upload complete: ${(uploadedBytes / 1024 / 1024).toFixed(2)} MB sent\n`);
+        }
 
         return {
           success: true,

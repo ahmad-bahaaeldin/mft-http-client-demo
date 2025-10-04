@@ -105,7 +105,7 @@ async function uploadWorkflow() {
     {
       type: 'confirm',
       name: 'compress',
-      message: 'Compress file with gzip before uploading?',
+      message: 'Compress file to ZIP before uploading?',
       default: false
     }
   ]);
@@ -118,8 +118,8 @@ async function uploadWorkflow() {
   if (result.success) {
     console.log('✅', result.message);
     if (answers.compress) {
-      console.log('📦 File was compressed and uploaded as:', path.basename(answers.localPath) + '.gz');
-      console.log('⚠️  Remember to configure MFT post-action to decompress the file');
+      console.log('📦 File was compressed and uploaded as:', path.basename(answers.localPath) + '.zip');
+      console.log('⚠️  Remember to configure MFT post-action to unzip the file');
     }
     console.log('📊 Response:', JSON.stringify(result.data, null, 2));
   } else {

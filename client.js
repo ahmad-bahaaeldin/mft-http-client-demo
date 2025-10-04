@@ -2,7 +2,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import fs from 'fs';
 import path from 'path';
-import zlib from 'zlib';
+import archiver from 'archiver';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -95,7 +95,7 @@ class ActiveTransferClient {
    * @param {string} filePath - Local file path to upload
    * @param {string} remotePath - Remote destination path (relative to VFS root)
    * @param {Object} options - Upload options
-   * @param {boolean} options.compress - Compress file to .gz before uploading (default: false)
+   * @param {boolean} options.compress - Compress file to .zip before uploading (default: false)
    * @returns {Promise<Object>} Response data
    */
   async uploadFile(filePath, remotePath = '/', options = {}) {
@@ -139,10 +139,18 @@ class ActiveTransferClient {
       let uploadFileName = fileName;
       let uploadFileSize = fileSize;
 
-      // Apply gzip compression if requested
+      // Apply zip compression if requested
       if (compress) {
-        fileStream = fileStream.pipe(zlib.createGzip());
-        uploadFileName = fileName + '.gz';
+        const archive = archiver('zip', {
+          zlib: { level: 9 } // Maximum compression
+        });
+
+        // Pipe the file into the archive
+        archive.append(fileStream, { name: fileName });
+        archive.finalize();
+
+        fileStream = archive;
+        uploadFileName = fileName + '.zip';
         uploadFileSize = null; // Size unknown after compression
       }
 
@@ -174,7 +182,7 @@ class ActiveTransferClient {
       console.log('File Size (original):', (fileSize / 1024 / 1024).toFixed(2), 'MB');
       console.log('Upload Path:', remotePath);
       console.log('Action: STOR');
-      console.log('Compression:', compress ? 'gzip (enabled)' : 'none');
+      console.log('Compression:', compress ? 'zip (enabled)' : 'none');
       console.log('Content-Type:', form.getHeaders()['content-type']);
       console.log('Transfer: Streaming (chunked)');
       console.log('Timeout:', (timeoutMs / 1000).toFixed(0), 'seconds');
@@ -239,10 +247,18 @@ class ActiveTransferClient {
       let uploadFileName = fileName;
       let uploadFileSize = fileSize;
 
-      // Apply gzip compression if requested
+      // Apply zip compression if requested
       if (compress) {
-        fileStream = fileStream.pipe(zlib.createGzip());
-        uploadFileName = fileName + '.gz';
+        const archive = archiver('zip', {
+          zlib: { level: 9 } // Maximum compression
+        });
+
+        // Pipe the file into the archive
+        archive.append(fileStream, { name: fileName });
+        archive.finalize();
+
+        fileStream = archive;
+        uploadFileName = fileName + '.zip';
         uploadFileSize = null; // Size unknown after compression
       }
 
@@ -271,7 +287,7 @@ class ActiveTransferClient {
       console.log('File (upload):', uploadFileName);
       console.log('File Size (original):', (fileSize / 1024 / 1024).toFixed(2), 'MB');
       console.log('Upload Path:', remotePath);
-      console.log('Compression:', compress ? 'gzip (enabled)' : 'none');
+      console.log('Compression:', compress ? 'zip (enabled)' : 'none');
       console.log('Content-Type:', form.getHeaders()['content-type']);
       console.log('Transfer: Streaming (chunked)');
       console.log('Timeout:', (timeoutMs / 1000).toFixed(0), 'seconds');
